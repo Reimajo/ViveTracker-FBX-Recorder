@@ -34,7 +34,7 @@ Fbx setupFbx(const char* filename) {
 	manager->SetIOSettings(settings);
 
 	auto exporter = FbxExporter::Create(manager, "");
-	if (!exporter->Initialize(filename, IOSASCII, manager->GetIOSettings())) {
+	if (!exporter->Initialize(filename, IOSBinary, manager->GetIOSettings())) {
 		throw std::exception((std::string("Could not init fbx exporter: ") + exporter->GetStatus().GetErrorString()).c_str());
 	}
 

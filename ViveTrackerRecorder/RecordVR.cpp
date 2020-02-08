@@ -161,7 +161,6 @@ int main(int argc, char* argv[]) {
 	} while (!_kbhit());
 	vr.stop();
 
-
 	// Export to FBX
 	for (int devId : args.deviceList) {
 		setTransforms(fbx.scene, devices[devId].name + " - " + std::to_string(devId), frames[devId]);
