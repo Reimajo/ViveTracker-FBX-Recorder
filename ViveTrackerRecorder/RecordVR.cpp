@@ -10,20 +10,13 @@
 #include "StopWatch.h"
 #include "Console.h"
 
-void fbxTest2() {
-	auto fbx = setupFbx("test2.fbx");
+//for sleeping
+#include <chrono>
+#include <thread>
 
-	auto empty = FbxNode::Create(fbx.scene, "Empty");
-	fbx.scene->GetRootNode()->AddChild(empty);
-
-
-	std::vector<KeyFrame> frames;
-	frames.push_back({ 0, vr::HmdVector3_t {1, 0, 0}, vr::HmdQuaternion_t{0, 90, 0} });
-	frames.push_back({ 20, vr::HmdVector3_t {0, 0, 1}, vr::HmdQuaternion_t{0, 0, 90} });
-	setTransforms(fbx.scene, "Test object", frames);
-	cleanupFbx(fbx);
-}
-
+/*
+Listing all devices in the console
+*/
 void listDevices(VR& vr) {
 	auto devices = vr.listDevices();
 	std::cout << "VR tracked devices:\n";
@@ -40,6 +33,10 @@ public:
 	std::vector<int> deviceList;
 };
 
+/*
+Reading all arguments that have been specified in Visual Studio (Project/Properties/Debugging/CommandArguments) 
+or when calling the .exe manually in CMD
+*/
 bool parseArgs(int argc, char* argv[], Args& args) {
 	bool help = false;
 
@@ -96,11 +93,36 @@ bool parseArgs(int argc, char* argv[], Args& args) {
 	}
 	return true;
 }
-
+/*
+Reading pose and rotation from a single tracked device and storing it into a frame
+*/
 void trackDevice(VR &vr,  int devId, int time, std::vector<KeyFrame>& frames) {
 	vr::VRControllerState_t state;
 	vr::TrackedDevicePose_t pose;
-	if (vr.getSystem()->GetControllerStateWithPose(vr::TrackingUniverseStanding, devId, &state, sizeof(state), &pose)) {
+	// read device class
+	vr::ETrackedDeviceClass trackedDeviceClass = vr::VRSystem()->GetTrackedDeviceClass(devId);
+	// read all generic trackers and controllers
+	if ((trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_GenericTracker) || (trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_Controller) || (trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_TrackingReference)) {
+		if (vr.getSystem()->GetControllerStateWithPose(vr::TrackingUniverseStanding, devId, &state, sizeof(state), &pose)) {
+			if (pose.bPoseIsValid) {
+				auto pos = getPosition(pose.mDeviceToAbsoluteTracking);
+				auto rot = getRotation(pose.mDeviceToAbsoluteTracking);
+
+				frames.push_back(KeyFrame(time, pos, rot));
+
+				std::cout << pos.v[0] << " " << pos.v[1] << " " << pos.v[2] << "\n";
+				std::cout << rot.x << " " << rot.y << " " << rot.z << " " << rot.w << "\n";
+			}
+			else {
+				std::cout << "Pose is invalid\n\n";
+			}
+		}
+		else {
+			std::cout << "Could not get pose\n\n";
+		}
+	// for the HMD, functions are different
+	} else if (trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_HMD) {
+		vr.getSystem()->GetDeviceToAbsoluteTrackingPose(vr::TrackingUniverseStanding, 0, &pose, 1);
 		if (pose.bPoseIsValid) {
 			auto pos = getPosition(pose.mDeviceToAbsoluteTracking);
 			auto rot = getRotation(pose.mDeviceToAbsoluteTracking);
@@ -110,13 +132,13 @@ void trackDevice(VR &vr,  int devId, int time, std::vector<KeyFrame>& frames) {
 			std::cout << pos.v[0] << " " << pos.v[1] << " " << pos.v[2] << "\n";
 			std::cout << rot.x << " " << rot.y << " " << rot.z << " " << rot.w << "\n";
 		} else {
-			std::cout << "Pose is invalid\n\n";
+				std::cout << "Pose is invalid\n\n";
 		}
-	} else {
-		std::cout << "Could not get pose\n\n";
 	}
 }
-
+/*
+Main function that is running this program
+*/
 int main(int argc, char* argv[]) {
 	Args args;
 	if (!parseArgs(argc, argv, args)) {
@@ -125,7 +147,46 @@ int main(int argc, char* argv[]) {
 
 	VR vr;
 	vr.init();
-	auto devices = vr.listDevices();
+	//adding a small delay to allow steam to wake up
+	static bool justStarted = true;
+	if (justStarted) {
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+		justStarted = false;
+	}
+	//printing all connected devices
+	for (vr::TrackedDeviceIndex_t unDevice = 0; unDevice < vr::k_unMaxTrackedDeviceCount; unDevice++)
+	{
+		if (!vr.getSystem()->IsTrackedDeviceConnected(unDevice))
+			continue;
+		vr::VRControllerState_t state;
+		if (vr.getSystem()->GetControllerState(unDevice, &state, sizeof(state)))
+		{
+			vr::ETrackedDeviceClass trackedDeviceClass = vr::VRSystem()->GetTrackedDeviceClass(unDevice);
+			switch (trackedDeviceClass) {
+			case vr::ETrackedDeviceClass::TrackedDeviceClass_HMD:
+				std::cout << "HMD connected on " + std::to_string(unDevice) + "\n";
+				break;
+			case vr::ETrackedDeviceClass::TrackedDeviceClass_GenericTracker:
+				std::cout << "Tracker connected on " + std::to_string(unDevice) + "\n";
+			case vr::ETrackedDeviceClass::TrackedDeviceClass_Controller:
+				std::cout << "Controller connected on " + std::to_string(unDevice) + "\n";
+			}
+		}
+	}
+	//Listing all devices that are currently trackable, including reference points
+	std::map<int, VrDevice> devices = vr.listDevices();
+
+	//When user has no index specified when calling the .exe, we will record all devices
+	if (args.deviceList.empty() == true) {
+		std::cout << "No device list specified, recording all devices\n\n";
+		//TIL: You can't copy a map in c++ with a simple loop-through without modifying it, crazy things will happen. So we search for all possible IDs instead.
+		for (vr::TrackedDeviceIndex_t unDevice = 0; unDevice < vr::k_unMaxTrackedDeviceCount; unDevice++) {
+			if (devices.find(unDevice) != devices.end()) {
+				args.deviceList.push_back(unDevice);
+			}
+		}
+	}
+	//Checking if user has specified an ID that is not a trackable device
 	for (auto devId : args.deviceList) {
 		bool found = false;
 		if (devices.find(devId) == devices.end()) {
@@ -133,10 +194,12 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	auto fbx = setupFbx(args.filename.c_str());  // Set up the exporter early, to avoid having "file unavailable" errors *after* the recording
-
+	// Set up the exporter early, to avoid having "file unavailable" errors *after* the recording
+	auto fbx = setupFbx(args.filename.c_str());  
+	//List of all frames
 	std::map<int, std::vector<KeyFrame>> frames;
 
+	//Printing all devices that will be recorded
 	for (auto devId : args.deviceList) {
 		auto dev = devices[devId];
 		std::cout << "Recording " << dev.id << ": " << dev.name << "\n";
@@ -144,17 +207,23 @@ int main(int argc, char* argv[]) {
 	}
 
 	StopWatch watch;
-	std::cout << "\n\n\n\n";
+	std::cout << "\n\n\n";
 
 	Console console;
 	watch.start();
 	std::cout << "Recording... press any key to stop.\n";
 	std::cout << std::fixed;
+
+	int consoleLines = args.deviceList.size() * 2;
+	for (int i = 0; i < consoleLines; i++) {
+		std::cout << "\n";
+	}
+
 	do {
-		console.moveCursor(-2);
+		console.moveCursor(-consoleLines);
 
 		int time = watch.time();
-
+		//our loop for the final recording, runs as long as no key is pressed
 		for (int devId : args.deviceList) {
 			trackDevice(vr, devId, time, frames[devId]);
 		}
@@ -168,3 +237,21 @@ int main(int argc, char* argv[]) {
 	cleanupFbx(fbx);
 
 }
+
+
+/*
+Unused function to test the FBX API
+void fbxTest2() {
+	auto fbx = setupFbx("test2.fbx");
+
+	auto empty = FbxNode::Create(fbx.scene, "Empty");
+	fbx.scene->GetRootNode()->AddChild(empty);
+
+
+	std::vector<KeyFrame> frames;
+	frames.push_back({ 0, vr::HmdVector3_t {1, 0, 0}, vr::HmdQuaternion_t{0, 90, 0} });
+	frames.push_back({ 20, vr::HmdVector3_t {0, 0, 1}, vr::HmdQuaternion_t{0, 0, 90} });
+	setTransforms(fbx.scene, "Test object", frames);
+	cleanupFbx(fbx);
+}
+*/

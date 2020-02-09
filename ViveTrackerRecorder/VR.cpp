@@ -57,12 +57,13 @@ void VR::stop() {
 std::map<int, VrDevice> VR::listDevices() {
 	std::map<int, VrDevice> result;
 	for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
-		auto devClass = this->system->GetTrackedDeviceClass(i);
-		if (devClass == vr::TrackedDeviceClass_Invalid) continue;
-
+		//Changed this to the recommended version
+		vr::ETrackedDeviceClass trackedDeviceClass = vr::VRSystem()->GetTrackedDeviceClass(i);
+		if (trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_Invalid) continue;			// ignoring those
+		if (trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_TrackingReference) continue;	// ignoring those
 		VrDevice item;
 		item.id = i;
-		item.cls = devClass;
+		item.cls = trackedDeviceClass;
 		item.name = getTrackedDeviceString(i, vr::Prop_ModelNumber_String);
 		result.emplace(i, item);
 	}
