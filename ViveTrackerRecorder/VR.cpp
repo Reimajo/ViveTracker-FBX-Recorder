@@ -53,19 +53,32 @@ void VR::stop() {
 	this->system = nullptr;
 	vr::VR_Shutdown();
 }
-
+/*
+	Listing all connected devices of those device classes:
+		TrackedDeviceClass_HMD - The device at this index is an HMD
+		TrackedDeviceClass_Controller - The device is a controller
+		TrackedDeviceClass_GenericTracker - The device is a tracker
+	Ignoring devices from those device classes:
+		TrackedDeviceClass_Invalid - There is no device at this index
+		TrackedDeviceClass_TrackingReference - The device is a camera, Lighthouse base station, or other device that supplies tracking ground truth.
+		TrackedDeviceClass_DisplayRedirect - Accessories that aren't necessarily tracked themselves, but may redirect video output from other tracked devices
+*/
 std::map<int, VrDevice> VR::listDevices() {
 	std::map<int, VrDevice> result;
 	for (int i = 0; i < vr::k_unMaxTrackedDeviceCount; i++) {
 		//Changed this to the recommended version
 		vr::ETrackedDeviceClass trackedDeviceClass = vr::VRSystem()->GetTrackedDeviceClass(i);
-		if (trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_Invalid) continue;			// ignoring those
-		if (trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_TrackingReference) continue;	// ignoring those
-		VrDevice item;
-		item.id = i;
-		item.cls = trackedDeviceClass;
-		item.name = getTrackedDeviceString(i, vr::Prop_ModelNumber_String);
-		result.emplace(i, item);
+		if ((trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_HMD) || 
+			(trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_Controller) ||
+			(trackedDeviceClass == vr::ETrackedDeviceClass::TrackedDeviceClass_GenericTracker)) {
+				//then this is a device that we can and want to track
+				VrDevice item;
+				item.id = i;
+				item.cls = trackedDeviceClass;
+				item.name = getTrackedDeviceString(i, vr::Prop_ModelNumber_String);
+				result.emplace(i, item);
+		}
+		
 	}
 	return result;
 }

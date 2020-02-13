@@ -144,15 +144,36 @@ int main(int argc, char* argv[]) {
 	if (!parseArgs(argc, argv, args)) {
 		return 0;
 	}
-
+	std::cout << "https://github.com/Reimajo/ViveTracker-FBX-Recorder" << "\n\n";
+	std::cout << "App usage:\n";
+	std::cout << "-----------------------------\n";
+	auto appName = std::string(argv[0]);
+	int lastBackslash = appName.rfind('\\');
+	int lastSlash = appName.rfind('/');
+	int x = std::max(lastBackslash, lastSlash);
+	auto nameOnly = appName.substr(x + 1);
+	std::cout << "start "<< nameOnly << " -h\n";
+	std::cout << "start " << nameOnly << " -list\n";
+	std::cout << "start " << nameOnly << " -o file1.fbx -d 1 5 9\n\n";
+	std::cout << "-list              List all tracked VR devices and their IDs.\n";
+	std::cout << "-o filename        Sets the file name to write the animation data to.\n";
+	std::cout << "-d devid devid...  Sets all the device IDs to record.\n";
+	std::cout << "-----------------------------\n\n";
+	std::cout << "Initialising application, please wait...\n";
 	VR vr;
 	vr.init();
+	Console console;
 	//adding a small delay to allow steam to wake up
 	static bool justStarted = true;
 	if (justStarted) {
 		std::this_thread::sleep_for(std::chrono::seconds(1));
 		justStarted = false;
 	}
+	//clear last console line
+	console.moveCursor(-1);
+	std::cout << "                                            \n";
+	console.moveCursor(-1);
+	std::cout << "Available devices:\n\n";
 	//printing all connected devices
 	for (vr::TrackedDeviceIndex_t unDevice = 0; unDevice < vr::k_unMaxTrackedDeviceCount; unDevice++)
 	{
@@ -168,8 +189,10 @@ int main(int argc, char* argv[]) {
 				break;
 			case vr::ETrackedDeviceClass::TrackedDeviceClass_GenericTracker:
 				std::cout << "Tracker connected on " + std::to_string(unDevice) + "\n";
+				break;
 			case vr::ETrackedDeviceClass::TrackedDeviceClass_Controller:
 				std::cout << "Controller connected on " + std::to_string(unDevice) + "\n";
+				break;
 			}
 		}
 	}
@@ -178,7 +201,7 @@ int main(int argc, char* argv[]) {
 
 	//When user has no index specified when calling the .exe, we will record all devices
 	if (args.deviceList.empty() == true) {
-		std::cout << "No device list specified, recording all devices\n\n";
+		std::cout << "\nNo device list specified, recording all devices\n\n";
 		//TIL: You can't copy a map in c++ with a simple loop-through without modifying it, crazy things will happen. So we search for all possible IDs instead.
 		for (vr::TrackedDeviceIndex_t unDevice = 0; unDevice < vr::k_unMaxTrackedDeviceCount; unDevice++) {
 			if (devices.find(unDevice) != devices.end()) {
@@ -190,7 +213,7 @@ int main(int argc, char* argv[]) {
 	for (auto devId : args.deviceList) {
 		bool found = false;
 		if (devices.find(devId) == devices.end()) {
-			std::cout << "Unrecognized device id: " << devId << "\n";
+			std::cout << "Unrecognized device ID: " << devId << " (unsupported device class or no device at this ID)\n";
 		}
 	}
 
@@ -202,14 +225,23 @@ int main(int argc, char* argv[]) {
 	//Printing all devices that will be recorded
 	for (auto devId : args.deviceList) {
 		auto dev = devices[devId];
-		std::cout << "Recording " << dev.id << ": " << dev.name << "\n";
+		std::cout << "Recording " << dev.id << ": " << dev.name << " (";
+		switch (dev.cls) {
+			case vr::ETrackedDeviceClass::TrackedDeviceClass_HMD : std::cout << "HMD";
+				break;
+			case vr::ETrackedDeviceClass::TrackedDeviceClass_Controller : std::cout << "Controller";
+				break;
+			case vr::ETrackedDeviceClass::TrackedDeviceClass_GenericTracker : std::cout << "Tracker";
+				break;
+			default : std::cout << "Unknown";
+		}
+		std::cout << ")" << "\n";
 		frames.emplace(devId, std::vector<KeyFrame>());
 	}
 
 	StopWatch watch;
-	std::cout << "\n\n\n";
+	std::cout << "\n";
 
-	Console console;
 	watch.start();
 	std::cout << "Recording... press any key to stop.\n";
 	std::cout << std::fixed;
